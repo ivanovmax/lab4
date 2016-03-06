@@ -3,29 +3,30 @@
 
 loop(Users) ->
 	receive
-		{connect, User} -> 
-			case lists:member(User, Users) of
+		{connect, {User, UserPid}} -> 
+			case lists:keymember(User, 1, Users) of
 				true -> 
 					io:format("User '~s' already connected~n", [User]), 
 					loop(Users);
 				false -> 
 					io:format("User '~s' connected~n", [User]),
-					loop([User|Users])
+					loop([{User, UserPid}|Users])
 			end;
-		{disconnect, User} ->
-			case lists:member(User, Users) of
-				true -> 
-					NewUsers = lists:delete(User, Users),
+		{disconnect, {User, UserPid}} ->
+			case lists:member({User, UserPid}, Users) of
+				true ->
+					UserPid ! {stop, User},
+					NewUsers = lists:keydelete(User, 1, Users),
 					io:format("User '~s' disconnected~n", [User]),
-						loop(NewUsers);
+					loop(NewUsers);
 				false -> 
 					io:format("User '~s' not connected~n", [User]),
 					loop(Users)
 			end;
 		{msg, User, Msg} -> 
-			case lists:member(User, Users) of
+			case lists:keymember(User, 1, Users) of
 				true -> 
-					io:format("~s:~s~n", [User, Msg]),
+					send_msg(Msg, User, Users),
 					loop(Users);
 				false -> 
 					loop(Users)
@@ -44,3 +45,9 @@ disconnect(User, Server) ->
 
 send(Msg, User, Server) ->
 	Server ! {msg, User, Msg}.
+
+send_msg(Msg, Src, []) -> io:format("Server get '~s' from '~s'~n",[Msg, Src]);
+send_msg(Msg, Src, [{Src, _}|Other]) -> send_msg(Msg, Src, Other);
+send_msg(Msg, Src, [{User,UserPid}|Other]) ->
+	UserPid ! {msg, Src, User, Msg},
+	send_msg(Msg, Src, Other).
